@@ -12,6 +12,7 @@ function App() {
   const [decryptionTime, setDecryptionTime] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'text' | 'file'>('text');
   const [keyLength, setKeyLength] = useState(16);
+  const [mode, setMode] = useState<'encrypt-decrypt' | 'decrypt-only'>('encrypt-decrypt');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [fileContent, setFileContent] = useState('');
@@ -59,7 +60,8 @@ function App() {
       return;
     }
 
-    if (!encryptedText) {
+    const textToDecrypt = mode === 'encrypt-decrypt' ? encryptedText : (activeTab === 'text' ? inputText : fileContent);
+    if (!textToDecrypt) {
       alert('Không có dữ liệu mã hóa để giải mã!');
       return;
     }
@@ -67,13 +69,16 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const request: DecryptRequest = { ciphertext: encryptedText, key: secretKey };
+      const request: DecryptRequest = { ciphertext: textToDecrypt, key: secretKey };
       const response = await axios.post<DecryptResponse>(
         'http://localhost:8080/decrypt',
         request
       );
       setDecryptedText(response.data.plaintext);
       setDecryptionTime(response.data.decrypt_time_ms);
+      if (mode === 'decrypt-only') {
+        setEncryptedText(textToDecrypt); // Hiển thị input đã mã hóa
+      }
     } catch (error) {
       alert('Lỗi khi giải mã: ' + (error as Error).message);
     } finally {
@@ -128,6 +133,20 @@ function App() {
     <div className="container">
       <h1>Mã hóa và Giải mã AES</h1>
 
+      <div className="mode-section">
+        <label>Chế độ:</label>
+        <select
+          value={mode}
+          onChange={(e) => {
+            setMode(e.target.value as 'encrypt-decrypt' | 'decrypt-only');
+            clearAll();
+          }}
+        >
+          <option value="encrypt-decrypt">Mã hóa & Giải mã</option>
+          <option value="decrypt-only">Chỉ giải mã</option>
+        </select>
+      </div>
+
       <div className="key-section">
         <label htmlFor="keyLength">Loại mã hóa:</label>
         <select
@@ -174,18 +193,22 @@ function App() {
 
       {activeTab === 'text' ? (
         <div className="text-input-section">
-          <label htmlFor="inputText">Văn bản đầu vào:</label>
+          <label htmlFor="inputText">
+            {mode === 'encrypt-decrypt' ? 'Văn bản đầu vào:' : 'Văn bản đã mã hóa:'}
+          </label>
           <textarea
             id="inputText"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Nhập văn bản cần mã hóa"
+            placeholder={mode === 'encrypt-decrypt' ? 'Nhập văn bản cần mã hóa' : 'Nhập văn bản đã mã hóa'}
             rows={5}
           />
         </div>
       ) : (
         <div className="file-input-section">
-          <label htmlFor="fileInput">Chọn tệp tin:</label>
+          <label htmlFor="fileInput">
+            {mode === 'encrypt-decrypt' ? 'Chọn tệp tin:' : 'Chọn tệp đã mã hóa:'}
+          </label>
           <input type="file" id="fileInput" ref={fileInputRef} onChange={handleFileChange} />
           {fileName && (
             <div className="file-info">
@@ -197,15 +220,17 @@ function App() {
       )}
 
       <div className="button-group">
-        <button
-          onClick={handleEncrypt}
-          disabled={isProcessing || (!inputText && !fileContent) || !secretKey}
-        >
-          {isProcessing ? 'Đang mã hóa...' : 'Mã hóa'}
-        </button>
+        {mode === 'encrypt-decrypt' && (
+          <button
+            onClick={handleEncrypt}
+            disabled={isProcessing || (!inputText && !fileContent) || !secretKey}
+          >
+            {isProcessing ? 'Đang mã hóa...' : 'Mã hóa'}
+          </button>
+        )}
         <button
           onClick={handleDecrypt}
-          disabled={isProcessing || !encryptedText || !secretKey}
+          disabled={isProcessing || (mode === 'encrypt-decrypt' && !encryptedText) || (mode === 'decrypt-only' && !inputText && !fileContent) || !secretKey}
         >
           {isProcessing ? 'Đang giải mã...' : 'Giải mã'}
         </button>
@@ -214,7 +239,7 @@ function App() {
         </button>
       </div>
 
-      {encryptionTime !== null && (
+      {encryptionTime !== null && mode === 'encrypt-decrypt' && (
         <div className="time-info">
           <p>Thời gian mã hóa: {encryptionTime.toFixed(2)} ms</p>
         </div>
